@@ -126,6 +126,7 @@ import (
   "time"
   "bytes"
   "os"
+  "io"
   "path/filepath"
   "strings"
   "errors"
@@ -175,6 +176,7 @@ type File struct {
 	*bytes.Reader
 	data []byte
 	fi FileInfo
+	readdirPosition int
 }
 
 // A noop-closer.
@@ -183,7 +185,22 @@ func (f *File) Close() error {
 }
 
 func (f *File) Readdir(count int) ([]os.FileInfo, error) {
-  return nil, os.ErrNotExist
+	if f.fi.isDir {
+		if count <= 0 {
+			return f.fi.files, nil
+		}
+		max := len(f.fi.files)
+		if f.readdirPosition >= max {
+			return nil, io.EOF
+		}
+		from := f.readdirPosition
+		f.readdirPosition += count
+		if f.readdirPosition > max {
+			f.readdirPosition = max
+		}
+		return f.fi.files[from:f.readdirPosition], nil
+	}
+	return nil, os.ErrInvalid
 }
 
 
@@ -219,10 +236,6 @@ func (f *FileInfo) ModTime() time.Time {
 
 func (f *FileInfo) IsDir() bool {
 	return f.isDir
-}
-
-func (f *FileInfo) Readdir(count int) ([]os.FileInfo, error) {
-	return f.files, nil
 }
 
 func (f *FileInfo) Sys() interface{} {
